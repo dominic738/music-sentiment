@@ -3,10 +3,35 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 import lyricsgenius
 import re
+import os
+import pickle
 from sentence_transformers import SentenceTransformer
 
 
 genius = lyricsgenius.Genius('2dYqSvUNCMoRboDR60nHLo7OsHqANk8BehiQ2WxExnKgqyBbLwdB-ePTjyxgRdsm', remove_section_headers = True)
+
+def get_song(song_title, artist_title):
+    return genius.search_song(song_title, artist_title)
+
+
+def get_song_cached(song_name, artist_name, cache_dir = 'lyrics_cache'):
+
+    os.makedirs(cache_dir, exist_ok = True)
+
+    safe_name = f"{song_name}__{artist_name}".replace(" ", "_").lower()
+    cache_path = os.path.join(cache_dir, f"{safe_name}.pkl")
+
+    if os.path.exists(cache_path):
+        with open(cache_path, 'rb') as f:
+            return pickle.load(f)
+
+    song = genius.search_song(song_name, artist_name)
+    if song:
+        with open(cache_path, 'wb') as f:
+            pickle.dump(song, f)
+
+    return song
+
 
 def get_lyrics(song_title, artist_title):
     song = genius.search_song(song_title, artist_title)
@@ -17,7 +42,7 @@ def get_lyrics(song_title, artist_title):
 
 
 def clean_lyrics(text):
-
+    
     text = re.sub(r'^\d+\s+Contributors.*$', '', text, flags=re.MULTILINE)
     text = text.replace('—', ' — ').replace('–', ' – ')
     text = re.sub(r'\[(.*?)\]', '', text)
@@ -30,14 +55,17 @@ def clean_lyrics(text):
 
 def filter_and_split_lines(text, max_length=200):
     lines = text.split('\n')
-    filtered_lines = [line for line in lines if len(line.strip()) <= max_length and line.strip() != '']
+    filtered_lines = [line for line in lines if (len(line.strip()) <= max_length and line.strip() != '')]
     return filtered_lines
 
-
+def remove_duplicates(lines):
+    return list(dict.fromkeys(lines))
 
 def lyrics_preprocessing(song):
     text = clean_lyrics(song)
     lines = filter_and_split_lines(text)
+    lines = remove_duplicates(lines)
+    
     return lines
 
 
@@ -64,9 +92,7 @@ def plot_pca(embeddings, lyrics):
     plt.show()
 
 
-def get_song_embeddings(song_title, artist_title, model = SentenceTransformer('all-MiniLM-L6-v2'), plot = False):
-
-    song = genius.search_song(song_title, artist_title)
+def get_song_embeddings(song, model = SentenceTransformer('all-MiniLM-L6-v2'), plot = False):
     
     cleaned_lyrics = lyrics_preprocessing(song.lyrics)
 
